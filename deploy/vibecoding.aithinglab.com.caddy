@@ -1,0 +1,25 @@
+# Общий сайт vibecoding.aithinglab.com. Правки — только вручную на сервере
+# в /opt/briefgenerator/deploy/conf.d/, CI его не трогает.
+vibecoding.aithinglab.com {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	header X-Robots-Tag "noindex, nofollow"
+
+	# gitflow
+	handle_path /gitflow/* {
+		reverse_proxy 172.28.0.1:8091
+	}
+
+	# grafana: консольное CLI-приложение без HTTP, роут не нужен
+	# (порт 8092 освобождён)
+
+	# lokigrafana (Grafana с GF_SERVER_SERVE_FROM_SUB_PATH=true — префикс НЕ срезаем)
+	handle /lokigrafana/* {
+		reverse_proxy 172.28.0.1:8093
+	}
+
+	# следующий проект:
+	# handle_path /some-project/* {
+	#     reverse_proxy 172.28.0.1:8094
+	# }
+}

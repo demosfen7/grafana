@@ -1,0 +1,12 @@
+# grafana — учебный проект (weather CLI), пользователь vibecoding (rootless Docker)
+# Консольное приложение с input() — не веб-сервис, поэтому без порта/healthcheck/Caddy.
+# stdin_open+tty не дают контейнеру уйти в краш-луп на EOFError без интерактивного attach.
+services:
+  vibecoding-grafana:
+    image: ${IMAGE}
+    container_name: vibecoding-grafana
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
