@@ -10,3 +10,12 @@ services:
     tty: true
     env_file:
       - .env
+    environment:
+      # логи пушатся напрямую в Loki (проект lokigrafana) по имени сервиса в общей сети
+      LOKI_URL: "http://loki:3100"
+    networks:
+      - loki-net
+
+networks:
+  loki-net:
+    external: true

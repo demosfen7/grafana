@@ -24,6 +24,8 @@ import requests
 from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
+from loki_logging import setup_logging
+
 # ── 1. Инициализация colorama ─────────────────────────────────────────────────
 # autoreset=True означает, что цвет автоматически сбрасывается после каждого print,
 # и не нужно писать Style.RESET_ALL в конце каждой строки.
@@ -33,6 +35,7 @@ init(autoreset=True)
 # load_dotenv() читает файл .env в текущей папке и кладёт значения в os.environ.
 load_dotenv()
 API_KEY = os.getenv("API_KEY")  # None, если переменная не задана
+logger = setup_logging()        # логи уходят в Loki, если задан LOKI_URL
 
 # Базовые URL OpenWeather (без параметров — их передаём отдельно)
 GEOCODING_URL = "http://api.openweathermap.org/geo/1.0/direct"
@@ -199,6 +202,7 @@ def _check_api_key() -> None:
     """Проверяем наличие ключа до любого запроса. Завершаем приложение, если ключа нет."""
     if not API_KEY:
         print(Fore.RED + "Ошибка: API_KEY не найден. Создайте файл .env и добавьте API_KEY=ваш_ключ.")
+        logger.error("API_KEY не найден — приложение остановлено")
         sys.exit(1)
 
 
@@ -320,17 +324,24 @@ def get_weather_by_coordinates(lat: float, lon: float) -> dict:
         response = _request_with_retry(WEATHER_URL, params)
     except requests.exceptions.RequestException as exc:
         print(Fore.RED + f"Сетевая ошибка при запросе погоды: {exc}")
+        logger.error(f"Сетевая ошибка при запросе погоды (lat={lat}, lon={lon}): {exc}")
         return {}   # пустой dict — сигнал для CLI предложить кэш
 
     if response.status_code == 401:
         print(Fore.RED + "Ошибка 401: невалидный API-ключ.")
+        logger.error("Ошибка 401: невалидный API-ключ")
         return {}
 
     if response.status_code != 200:
         print(Fore.RED + f"Ошибка запроса погоды: HTTP {response.status_code}.")
+        logger.warning(f"Ошибка запроса погоды: HTTP {response.status_code} (lat={lat}, lon={lon})")
         return {}
 
-    return response.json()
+    data = response.json()
+    city_name = data.get("name", "?")
+    temp = data.get("main", {}).get("temp", "?")
+    logger.info(f"Погода получена: {city_name} ({lat}, {lon}), {temp}°C")
+    return data
 
 
 def get_forecast(lat: float, lon: float) -> dict:
@@ -727,6 +738,7 @@ def main() -> None:
     Пользователь выбирает режим (1/2/3) или выходит (0).
     """
     _check_api_key()  # сразу проверяем ключ — не тратим время пользователя
+    logger.info("weather-cli: запуск")
 
     while True:
         _print_menu()
@@ -734,6 +746,7 @@ def main() -> None:
 
         if choice == "0":
             print(Fore.CYAN + "До свидания!")
+            logger.info("weather-cli: завершение по команде пользователя")
             break
         elif choice == "1":
             _mode_city()
