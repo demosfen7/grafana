@@ -48,7 +48,8 @@ def setup_logging(app_name: str = "weather-cli") -> logging.Logger:
     loki_url = os.getenv("LOKI_URL")
     if loki_url:
         formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        handler = LokiHandler(loki_url, labels={"app": app_name})
+        # job — стандартный лейбл, вокруг которого построено большинство готовых Loki-дашбордов
+        handler = LokiHandler(loki_url, labels={"app": app_name, "job": app_name})
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
