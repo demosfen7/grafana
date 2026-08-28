@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Погода — OpenWeather</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── CSS-переменные (меняются при смене темы погоды) ──────────────────── */
+    :root {
+      --text:        #ffffff;
+      --text-sub:    rgba(255, 255, 255, 0.65);
+      --glass:       rgba(255, 255, 255, 0.12);
+      --glass-hi:    rgba(255, 255, 255, 0.20);
+      --border:      rgba(255, 255, 255, 0.22);
+      --shadow:      0 12px 48px rgba(0, 0, 0, 0.28);
+      --blur:        blur(20px);
+    }
+
+    /* ── Фон: плавный градиент + анимация ────────────────────────────────── */
+    body {
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 32px 16px 48px;
+      /* дефолтный фон до первого запроса */
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      background-size: 300% 300%;
+      animation: bgPulse 14s ease infinite;
+      color: var(--text);
+      transition: background 1.4s ease, color .4s;
+    }
+
+    @keyframes bgPulse {
+      0%   { background-position: 0%   50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0%   50%; }
+    }
+
+    /* Динамические фоны по условию погоды */
+    body.bg-clear-day    { background: linear-gradient(135deg, #f46b45, #eea849, #f7b733); }
+    body.bg-clear-night  { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
+    body.bg-clouds       { background: linear-gradient(135deg, #3a4759, #485563, #29323c); }
+    body.bg-rain         { background: linear-gradient(135deg, #1a2a6c, #2c3e50, #1a5276); }
+    body.bg-drizzle      { background: linear-gradient(135deg, #2980b9, #4a6fa5, #166088); }
+    body.bg-thunderstorm { background: linear-gradient(135deg, #0d0d0d, #1a0a2e, #2d1b69); }
+    body.bg-mist         { background: linear-gradient(135deg, #4a4a5c, #606c88, #3f4c6b); }
+
+    /* Снег: светлый фон → тёмный текст */
+    body.bg-snow {
+      background: linear-gradient(135deg, #8ec5fc, #e0c3fc, #d6eaf8);
+      --text:     #1a1a2e;
+      --text-sub: rgba(0, 0, 0, 0.55);
+      --glass:    rgba(255, 255, 255, 0.40);
+      --glass-hi: rgba(255, 255, 255, 0.55);
+      --border:   rgba(0, 0, 0, 0.14);
+    }
+
+    /* ── Обёртка ──────────────────────────────────────────────────────────── */
+    .wrap {
+      width: 100%;
+      max-width: 720px;
+    }
+
+    /* ── Поиск ────────────────────────────────────────────────────────────── */
+    .search {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .search input {
+      flex: 1;
+      padding: 15px 24px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      backdrop-filter: var(--blur);
+      outline: none;
+      transition: border-color .25s, box-shadow .25s;
+    }
+    .search input::placeholder { color: var(--text-sub); }
+    .search input:focus {
+      border-color: rgba(255, 255, 255, .55);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, .1);
+    }
+
+    .search button {
+      padding: 15px 28px;
+      background: var(--glass-hi);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      backdrop-filter: var(--blur);
+      transition: background .2s, transform .1s;
+      white-space: nowrap;
+    }
+    .search button:hover  { background: rgba(255, 255, 255, .32); }
+    .search button:active { transform: scale(.97); }
+
+    #forecastBtn {
+      background: rgba(255, 255, 255, .07);
+      border-color: rgba(255, 255, 255, .18);
+      color: rgba(255, 255, 255, .75);
+    }
+    #forecastBtn:hover { background: rgba(255, 255, 255, .18); color: var(--text); }
+
+    /* ── Статусные сообщения ─────────────────────────────────────────────── */
+    .msg {
+      display: none;
+      text-align: center;
+      padding: 14px 20px;
+      border-radius: 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      backdrop-filter: var(--blur);
+    }
+    .msg.loading {
+      display: block;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .msg.error {
+      display: block;
+      background: rgba(231, 76, 60, .22);
+      border: 1px solid rgba(231, 76, 60, .45);
+      color: #ff8a80;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255, 255, 255, .28);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    body.bg-snow .spinner { border-top-color: #1a1a2e; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Стеклянная карточка (переиспользуется) ──────────────────────────── */
+    .glass {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow);
+      border-radius: 24px;
+    }
+
+    /* ── Главная карточка ────────────────────────────────────────────────── */
+    .main-card {
+      display: none;
+      padding: 32px;
+      margin-bottom: 14px;
+      animation: slideUp .5s ease both;
+    }
+    .main-card.show { display: block; }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Верхняя строка: название + иконка */
+    .mc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .mc-city {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -.5px;
+      line-height: 1.15;
+    }
+    .mc-date {
+      color: var(--text-sub);
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    /* Анимация покачивания иконки */
+    .mc-icon {
+      flex-shrink: 0;
+      animation: float 4s ease-in-out infinite;
+    }
+    .mc-icon img {
+      width: 100px; height: 100px;
+      filter: drop-shadow(0 6px 16px rgba(0, 0, 0, .35));
+      display: block;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-8px); }
+    }
+
+    /* Температура + описание */
+    .mc-temp-row {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .mc-temp {
+      font-size: 84px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -4px;
+    }
+    .mc-desc {
+      font-size: 19px;
+      font-weight: 500;
+      text-transform: capitalize;
+    }
+    .mc-feels {
+      color: var(--text-sub);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    /* ── Строка быстрых показателей ──────────────────────────────────────── */
+    .qs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      margin-top: 26px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+    }
+    .qs-item {
+      text-align: center;
+      padding: 0 10px;
+      border-right: 1px solid var(--border);
+    }
+    .qs-item:last-child { border-right: none; }
+
+    .qs-icon { font-size: 18px; }
+    .qs-lbl  { font-size: 10px; color: var(--text-sub); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
+    .qs-val  { font-size: 15px; font-weight: 600; margin-top: 4px; }
+
+    /* ── Сетка детальных карточек ────────────────────────────────────────── */
+    .grid {
+      display: none;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      animation: slideUp .5s ease .1s both;
+    }
+    .grid.show { display: grid; }
+
+    .dc {
+      padding: 22px 14px;
+      text-align: center;
+      border-radius: 20px;
+      transition: transform .2s, background .2s;
+      cursor: default;
+    }
+    .dc:hover { transform: translateY(-4px); background: var(--glass-hi); }
+
+    .dc-icon { font-size: 28px; }
+    .dc-lbl  { font-size: 10px; color: var(--text-sub); text-transform: uppercase; letter-spacing: .5px; margin-top: 8px; }
+    .dc-val  { font-size: 22px; font-weight: 700; line-height: 1.1; margin-top: 5px; }
+    .dc-sub  { font-size: 11px; color: var(--text-sub); margin-top: 3px; }
+
+    /* ── Осадки (появляется при наличии данных) ──────────────────────────── */
+    .precip-row {
+      display: none;
+      gap: 12px;
+      margin-bottom: 14px;
+      animation: slideUp .5s ease .05s both;
+    }
+    .precip-row.show { display: flex; }
+    .precip-card {
+      flex: 1;
+      padding: 16px 20px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .precip-card .p-icon { font-size: 30px; }
+    .precip-card .p-lbl  { font-size: 11px; color: var(--text-sub); text-transform: uppercase; letter-spacing: .5px; }
+    .precip-card .p-val  { font-size: 20px; font-weight: 700; }
+
+    /* ── Прогноз на 5 дней ──────────────────────────────────────────────── */
+    .forecast-section {
+      display: none;
+      margin-bottom: 14px;
+      animation: slideUp .5s ease .15s both;
+    }
+    .forecast-section.show { display: block; }
+
+    .forecast-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text-sub);
+      margin-bottom: 10px;
+      padding-left: 4px;
+    }
+
+    .forecast-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .fc {
+      padding: 18px 8px;
+      text-align: center;
+      border-radius: 20px;
+      transition: transform .2s, background .2s;
+    }
+    .fc:hover { transform: translateY(-4px); background: var(--glass-hi); }
+
+    .fc-day  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-sub); }
+    .fc-date { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+    .fc-icon { width: 52px; height: 52px; margin: 4px auto; display: block; }
+    .fc-desc { font-size: 10px; color: var(--text-sub); text-transform: capitalize; line-height: 1.3; min-height: 28px; }
+    .fc-max  { font-size: 18px; font-weight: 700; display: block; margin-top: 6px; }
+    .fc-min  { font-size: 13px; color: var(--text-sub); display: block; margin-top: 1px; }
+
+    @media (max-width: 520px) {
+      .forecast-row { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    /* ── Подсказка ───────────────────────────────────────────────────────── */
+    .hint {
+      text-align: center;
+      color: var(--text-sub);
+      font-size: 12px;
+      margin-top: 18px;
+    }
+
+    /* ── Кнопка «API» ────────────────────────────────────────────────────── */
+    .debug-btn {
+      display: none;
+      margin: 20px auto 0;
+      padding: 9px 20px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      color: var(--text-sub);
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: .4px;
+      transition: color .2s, border-color .2s, background .2s;
+    }
+    .debug-btn.show { display: block; }
+    .debug-btn:hover {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, .45);
+      background: var(--glass);
+    }
+
+    /* ── Модальное окно ──────────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .55);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: rgba(15, 20, 40, .88);
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 24px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .55);
+      width: 100%;
+      max-width: 680px;
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: slideUp .25s ease both;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .modal-close {
+      background: rgba(255, 255, 255, .1);
+      border: none;
+      color: rgba(255, 255, 255, .7);
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .2s, color .2s;
+    }
+    .modal-close:hover { background: rgba(255,255,255,.22); color: #fff; }
+
+    .modal-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 14px 24px 0;
+      flex-shrink: 0;
+    }
+    .tab-btn {
+      padding: 7px 16px;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 50px;
+      background: transparent;
+      color: rgba(255,255,255,.5);
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s, color .2s, border-color .2s;
+    }
+    .tab-btn.active {
+      background: rgba(255,255,255,.18);
+      color: #fff;
+      border-color: rgba(255,255,255,.35);
+    }
+    .tab-btn:hover:not(.active) { color: rgba(255,255,255,.8); }
+
+    .modal-body {
+      overflow-y: auto;
+      padding: 16px 24px 24px;
+      flex: 1;
+    }
+
+    .api-section { margin-bottom: 18px; }
+    .api-section:last-child { margin-bottom: 0; }
+    .api-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,.4);
+      margin-bottom: 7px;
+    }
+
+    .api-url {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #7dd3fc;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 10px;
+      padding: 12px 14px;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+    .api-url .url-base { color: rgba(255,255,255,.5); }
+    .api-url .url-param-key { color: #86efac; }
+    .api-url .url-param-val { color: #fde68a; }
+
+    pre.json-view {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      color: #e2e8f0;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 10px;
+      padding: 14px;
+      overflow-x: auto;
+      white-space: pre;
+      margin: 0;
+    }
+    .jk { color: #86efac; } /* ключ */
+    .js { color: #fde68a; } /* строка */
+    .jn { color: #7dd3fc; } /* число */
+    .jb { color: #f9a8d4; } /* bool/null */
+
+    /* ── Адаптив ─────────────────────────────────────────────────────────── */
+    @media (max-width: 520px) {
+      .mc-temp { font-size: 60px; letter-spacing: -2px; }
+      .mc-city { font-size: 22px; }
+      .mc-icon img { width: 76px; height: 76px; }
+
+      .qs {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .qs-item:nth-child(2) { border-right: none; }
+      .qs-item:nth-child(3) { border-right: 1px solid var(--border); }
+      .qs-item:nth-child(1),
+      .qs-item:nth-child(2) {
+        padding-bottom: 16px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .grid { grid-template-columns: repeat(2, 1fr); }
+
+      .modal-box { border-radius: 18px; max-height: 90vh; }
+      .api-url, pre.json-view { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- Поиск -->
+    <div class="search">
+      <input id="q" type="text" placeholder="Введите название города…" autocomplete="off" spellcheck="false">
+      <button id="searchBtn">Найти</button>
+      <button id="forecastBtn">5 дней</button>
+    </div>
+
+    <!-- Загрузка / ошибка -->
+    <div class="msg" id="msg"></div>
+
+    <!-- Главная карточка -->
+    <div class="glass main-card" id="mc">
+      <div class="mc-header">
+        <div>
+          <div class="mc-city" id="mcCity">—</div>
+          <div class="mc-date" id="mcDate">—</div>
+        </div>
+        <div class="mc-icon">
+          <img id="mcIcon" src="" alt="">
+        </div>
+      </div>
+
+      <div class="mc-temp-row">
+        <div class="mc-temp" id="mcTemp">—</div>
+        <div>
+          <div class="mc-desc"  id="mcDesc">—</div>
+          <div class="mc-feels" id="mcFeels">—</div>
+        </div>
+      </div>
+
+      <!-- Быстрые показатели -->
+      <div class="qs">
+        <div class="qs-item">
+          <div class="qs-icon">🌡️</div>
+          <div class="qs-lbl">Мин / Макс</div>
+          <div class="qs-val" id="qsMinMax">—</div>
+        </div>
+        <div class="qs-item">
+          <div class="qs-icon">💧</div>
+          <div class="qs-lbl">Влажность</div>
+          <div class="qs-val" id="qsHum">—</div>
+        </div>
+        <div class="qs-item">
+          <div class="qs-icon">💨</div>
+          <div class="qs-lbl">Ветер</div>
+          <div class="qs-val" id="qsWind">—</div>
+        </div>
+        <div class="qs-item">
+          <div class="qs-icon">👁️</div>
+          <div class="qs-lbl">Видимость</div>
+          <div class="qs-val" id="qsVis">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Осадки (показывается только при наличии) -->
+    <div class="precip-row" id="precipRow">
+      <div class="glass precip-card" id="rainCard">
+        <div class="p-icon">🌧️</div>
+        <div>
+          <div class="p-lbl">Дождь за час</div>
+          <div class="p-val" id="pRain">—</div>
+        </div>
+      </div>
+      <div class="glass precip-card" id="snowCard">
+        <div class="p-icon">❄️</div>
+        <div>
+          <div class="p-lbl">Снег за час</div>
+          <div class="p-val" id="pSnow">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Детальные карточки -->
+    <div class="grid" id="grid">
+
+      <div class="glass dc">
+        <div class="dc-icon">🌡️</div>
+        <div class="dc-lbl">Ощущается</div>
+        <div class="dc-val" id="dFeel">—</div>
+        <div class="dc-sub">°C</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">💧</div>
+        <div class="dc-lbl">Влажность</div>
+        <div class="dc-val" id="dHum">—</div>
+        <div class="dc-sub">%</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">💨</div>
+        <div class="dc-lbl">Ветер</div>
+        <div class="dc-val" id="dWind">—</div>
+        <div class="dc-sub" id="dWindGust">м/с</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">🧭</div>
+        <div class="dc-lbl">Направление</div>
+        <div class="dc-val" id="dDir">—</div>
+        <div class="dc-sub" id="dDirDeg">—</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">⏱️</div>
+        <div class="dc-lbl">Давление</div>
+        <div class="dc-val" id="dPres">—</div>
+        <div class="dc-sub">гПа</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">☁️</div>
+        <div class="dc-lbl">Облачность</div>
+        <div class="dc-val" id="dCloud">—</div>
+        <div class="dc-sub">%</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">🌅</div>
+        <div class="dc-lbl">Рассвет</div>
+        <div class="dc-val" id="dRise">—</div>
+        <div class="dc-sub">местное время</div>
+      </div>
+
+      <div class="glass dc">
+        <div class="dc-icon">🌇</div>
+        <div class="dc-lbl">Закат</div>
+        <div class="dc-val" id="dSet">—</div>
+        <div class="dc-sub">местное время</div>
+      </div>
+
+    </div>
+
+    <!-- Прогноз на 5 дней -->
+    <div class="forecast-section" id="forecastSection">
+      <div class="forecast-title">Прогноз на 5 дней</div>
+      <div class="forecast-row" id="forecastRow"></div>
+    </div>
+
+    <p class="hint">Нажмите Enter или кнопку «Найти» для поиска</p>
+
+    <!-- Кнопка просмотра запроса/ответа -->
+    <button class="debug-btn" id="debugBtn">{ } Запрос / Ответ API</button>
+  </div>
+
+  <!-- Модальное окно -->
+  <div class="modal-overlay" id="debugModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Детали API-запроса</div>
+        <button class="modal-close" id="modalClose" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="tab-btn active" id="tabReqBtn">Запрос</button>
+        <button class="tab-btn" id="tabRespBtn">Ответ JSON</button>
+      </div>
+      <div class="modal-body">
+        <!-- Вкладка: Запрос -->
+        <div id="tabReq">
+          <div class="api-section">
+            <div class="api-label">1. Геокодирование (название → координаты)</div>
+            <div class="api-url" id="urlGeo">—</div>
+          </div>
+          <div class="api-section">
+            <div class="api-label">2. Текущая погода (по координатам)</div>
+            <div class="api-url" id="urlWthr">—</div>
+          </div>
+        </div>
+        <!-- Вкладка: Ответ -->
+        <div id="tabResp" style="display:none">
+          <div class="api-section">
+            <div class="api-label">Ответ геокодирования</div>
+            <pre class="json-view" id="jsonGeo">—</pre>
+          </div>
+          <div class="api-section">
+            <div class="api-label">Ответ погоды</div>
+            <pre class="json-view" id="jsonWthr">—</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Ключ не зашит в код: спрашиваем один раз и храним в localStorage браузера
+    // (локально у пользователя, на сервере в исходниках страницы его нет).
+    function getApiKey() {
+      let key = localStorage.getItem('openweather_api_key');
+      if (!key) {
+        key = prompt('Введите ваш OpenWeather API-ключ (openweathermap.org → My API keys):');
+        if (key) localStorage.setItem('openweather_api_key', key.trim());
+      }
+      return (key || '').trim();
+    }
+    const API_KEY = getApiKey();
+
+    const GEO_URL  = 'https://api.openweathermap.org/geo/1.0/direct';
+    const WTHR_URL = 'https://api.openweathermap.org/data/2.5/weather';
+    const FCST_URL = 'https://api.openweathermap.org/data/2.5/forecast';
+
+    // Краткая вспомогательная функция: document.getElementById
+    const $ = id => document.getElementById(id);
+
+    // ── Направление ветра: градусы → сторона света ────────────────────────
+    function compass(deg) {
+      const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+      // делим круг на 8 секторов по 45°; Math.round + % 8 для цикличности
+      return dirs[Math.round(deg / 45) % 8];
+    }
+
+    // ── Unix-timestamp → "ЧЧ:ММ" в часовом поясе города ─────────────────
+    // tz — смещение в секундах (поле timezone из API)
+    // Прибавляем tz к UTC-метке, чтобы получить "сдвинутое UTC",
+    // затем читаем UTC-компоненты — они соответствуют местному времени.
+    function toHHMM(unix, tz) {
+      const d = new Date((unix + tz) * 1000);
+      const h = String(d.getUTCHours()).padStart(2, '0');
+      const m = String(d.getUTCMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+
+    // ── Текущая дата в часовом поясе города ───────────────────────────────
+    function localDate(tz) {
+      const d = new Date((Date.now() / 1000 + tz) * 1000);
+      const days   = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      const months = ['января','февраля','марта','апреля','мая','июня',
+                      'июля','августа','сентября','октября','ноября','декабря'];
+      return `${days[d.getUTCDay()]}, ${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
+    }
+
+    // ── CSS-класс фона по коду погодного условия ──────────────────────────
+    // Коды OpenWeather: https://openweathermap.org/weather-conditions
+    function bgClass(id, sunrise, sunset) {
+      const now = Math.floor(Date.now() / 1000);
+      const isDay = now > sunrise && now < sunset;
+
+      if (id >= 200 && id < 300) return 'bg-thunderstorm'; // 2xx — гроза
+      if (id >= 300 && id < 400) return 'bg-drizzle';      // 3xx — морось
+      if (id >= 500 && id < 600) return 'bg-rain';         // 5xx — дождь
+      if (id >= 600 && id < 700) return 'bg-snow';         // 6xx — снег
+      if (id >= 700 && id < 800) return 'bg-mist';         // 7xx — туман/дымка
+      if (id === 800) return isDay ? 'bg-clear-day' : 'bg-clear-night'; // ясно
+      return 'bg-clouds';                                   // 80x — облака
+    }
+
+    // ── UI-хелперы ────────────────────────────────────────────────────────
+    function showMsg(text, type) {
+      const el = $('msg');
+      el.className = 'msg ' + type;
+      el.innerHTML = type === 'loading'
+        ? `<span class="spinner"></span>${text}`
+        : text;
+    }
+
+    function hideMsg() {
+      $('msg').className = 'msg';
+    }
+
+    // ── Хранилище последних запросов/ответов ─────────────────────────────
+    let _lastGeoUrl = '', _lastWthrUrl = '';
+    let _lastGeoResp = null, _lastWthrResp = null;
+
+    // ── Форматирование URL: выделяем параметры цветом ─────────────────────
+    function fmtUrl(url) {
+      const [base, qs] = url.split('?');
+      if (!qs) return `<span class="url-base">${escHtml(base)}</span>`;
+      const params = qs.split('&').map(p => {
+        const [k, v] = p.split('=');
+        const safeKey = escHtml(k);
+        const safeVal = decodeURIComponent(v || '');
+        // скрываем API-ключ
+        const displayVal = k === 'appid' ? '••••••••' : escHtml(safeVal);
+        return `<span class="url-param-key">${safeKey}</span>=<span class="url-param-val">${displayVal}</span>`;
+      }).join('<br>  &amp;');
+      return `<span class="url-base">${escHtml(base)}?</span><br>  ${params}`;
+    }
+
+    // ── JSON с подсветкой синтаксиса ──────────────────────────────────────
+    function fmtJson(obj) {
+      const raw = JSON.stringify(obj, null, 2);
+      return escHtml(raw).replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
+        match => {
+          if (/^"/.test(match)) {
+            return /:$/.test(match)
+              ? `<span class="jk">${match}</span>`
+              : `<span class="js">${match}</span>`;
+          }
+          if (/true|false|null/.test(match)) return `<span class="jb">${match}</span>`;
+          return `<span class="jn">${match}</span>`;
+        }
+      );
+    }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // ── Управление модалом ────────────────────────────────────────────────
+    function openDebug() {
+      $('urlGeo').innerHTML  = fmtUrl(_lastGeoUrl);
+      $('urlWthr').innerHTML = fmtUrl(_lastWthrUrl);
+      $('jsonGeo').innerHTML  = fmtJson(_lastGeoResp);
+      $('jsonWthr').innerHTML = fmtJson(_lastWthrResp);
+      showTab('req');
+      $('debugModal').classList.add('open');
+    }
+
+    function closeDebug() {
+      $('debugModal').classList.remove('open');
+    }
+
+    function showTab(name) {
+      const isReq = name === 'req';
+      $('tabReq').style.display  = isReq ? '' : 'none';
+      $('tabResp').style.display = isReq ? 'none' : '';
+      $('tabReqBtn').classList.toggle('active', isReq);
+      $('tabRespBtn').classList.toggle('active', !isReq);
+    }
+
+    // ── Прогноз на 5 дней ────────────────────────────────────────────────
+    async function searchForecast() {
+      const city = $('q').value.trim();
+      if (!city) return;
+
+      showMsg('Загрузка прогноза…', 'loading');
+      $('mc').classList.remove('show');
+      $('grid').classList.remove('show');
+      $('precipRow').classList.remove('show');
+      $('forecastSection').classList.remove('show');
+      $('debugBtn').classList.remove('show');
+
+      // Геокодирование
+      _lastGeoUrl = `${GEO_URL}?q=${encodeURIComponent(city)}&limit=1&lang=ru&appid=${API_KEY}`;
+      let geo;
+      try {
+        const resp = await fetch(_lastGeoUrl);
+        geo = await resp.json();
+        _lastGeoResp = geo;
+      } catch {
+        showMsg('Ошибка сети. Проверьте интернет-соединение.', 'error');
+        return;
+      }
+
+      if (!geo || geo.length === 0) {
+        showMsg(`Город «${escHtml(city)}» не найден. Попробуйте другое название.`, 'error');
+        return;
+      }
+
+      // Прогноз
+      const fcstUrl = `${FCST_URL}?lat=${geo[0].lat}&lon=${geo[0].lon}&units=metric&lang=ru&cnt=40&appid=${API_KEY}`;
+      let fcst;
+      try {
+        const resp = await fetch(fcstUrl);
+        fcst = await resp.json();
+      } catch {
+        showMsg('Ошибка при запросе прогноза.', 'error');
+        return;
+      }
+
+      if (String(fcst.cod) !== '200') {
+        showMsg(`Ошибка API: ${escHtml(fcst.message)}`, 'error');
+        return;
+      }
+
+      hideMsg();
+      renderForecast(fcst);
+    }
+
+    function renderForecast(data) {
+      const DAY_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      const MONTHS    = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+      // Группируем 3-часовые точки по дате
+      const days = {};
+      for (const item of data.list) {
+        const date = item.dt_txt.slice(0, 10);
+        if (!days[date]) days[date] = [];
+        days[date].push(item);
+      }
+
+      const row = $('forecastRow');
+      row.innerHTML = '';
+
+      for (const [dateStr, slots] of Object.entries(days).slice(0, 5)) {
+        const dt      = new Date(dateStr + 'T12:00:00Z');
+        const dayName = DAY_NAMES[dt.getUTCDay()];
+        const dateLabel = `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`;
+
+        const temps = slots.map(s => s.main.temp);
+        const tMin  = Math.round(Math.min(...temps));
+        const tMax  = Math.round(Math.max(...temps));
+
+        const noon = slots.find(s => s.dt_txt.includes('12:00:00')) || slots[0];
+        const icon = noon.weather[0].icon;
+        const desc = noon.weather[0].description;
+
+        const card = document.createElement('div');
+        card.className = 'glass fc';
+        card.innerHTML =
+          `<div class="fc-day">${dayName}</div>` +
+          `<div class="fc-date">${dateLabel}</div>` +
+          `<img class="fc-icon" src="https://openweathermap.org/img/wn/${icon}@2x.png" alt="${escHtml(desc)}">` +
+          `<div class="fc-desc">${escHtml(desc)}</div>` +
+          `<span class="fc-max">${tMax}°</span>` +
+          `<span class="fc-min">${tMin}°</span>`;
+        row.appendChild(card);
+      }
+
+      $('forecastSection').classList.add('show');
+    }
+
+    // ── Основной запрос ───────────────────────────────────────────────────
+    async function search() {
+      const city = $('q').value.trim();
+      if (!city) return;
+
+      // Скрываем прошлые результаты, показываем спиннер
+      showMsg('Загрузка…', 'loading');
+      $('mc').classList.remove('show');
+      $('grid').classList.remove('show');
+      $('precipRow').classList.remove('show');
+      $('forecastSection').classList.remove('show');
+
+      // Шаг 1: геокодирование — получаем координаты по названию города
+      _lastGeoUrl = `${GEO_URL}?q=${encodeURIComponent(city)}&limit=1&lang=ru&appid=${API_KEY}`;
+      let geo;
+      try {
+        const resp = await fetch(_lastGeoUrl);
+        geo = await resp.json();
+        _lastGeoResp = geo;
+      } catch {
+        showMsg('Ошибка сети. Проверьте интернет-соединение.', 'error');
+        return;
+      }
+
+      if (!geo || geo.length === 0) {
+        showMsg(`Город «${city}» не найден. Попробуйте другое название.`, 'error');
+        return;
+      }
+
+      // Шаг 2: текущая погода по координатам
+      _lastWthrUrl = `${WTHR_URL}?lat=${geo[0].lat}&lon=${geo[0].lon}&units=metric&lang=ru&appid=${API_KEY}`;
+      let w;
+      try {
+        const resp = await fetch(_lastWthrUrl);
+        w = await resp.json();
+        _lastWthrResp = w;
+      } catch {
+        showMsg('Ошибка при запросе данных погоды.', 'error');
+        return;
+      }
+
+      if (w.cod !== 200) {
+        showMsg(`Ошибка API: ${w.message}`, 'error');
+        return;
+      }
+
+      hideMsg();
+      $('debugBtn').classList.add('show');
+      render(w);
+    }
+
+    // ── Рендер данных в DOM ───────────────────────────────────────────────
+    function render(w) {
+      const tz = w.timezone; // смещение часового пояса в секундах
+
+      // Меняем фон страницы под текущую погоду
+      // Убираем все классы bg-* и ставим нужный
+      document.body.className = bgClass(w.weather[0].id, w.sys.sunrise, w.sys.sunset);
+
+      // ── Главная карточка ──────────────────────────────────────────────
+      $('mcCity').textContent  = `${w.name}, ${w.sys.country}`;
+      $('mcDate').textContent  = localDate(tz);
+      $('mcTemp').textContent  = Math.round(w.main.temp) + '°';
+      $('mcDesc').textContent  = w.weather[0].description;
+      $('mcFeels').textContent = `Ощущается как ${Math.round(w.main.feels_like)}°C`;
+
+      // Иконка погоды с OpenWeather CDN (@4x = 100×100px)
+      $('mcIcon').src = `https://openweathermap.org/img/wn/${w.weather[0].icon}@4x.png`;
+      $('mcIcon').alt = w.weather[0].description;
+
+      // Быстрые показатели
+      $('qsMinMax').textContent =
+        `${Math.round(w.main.temp_min)}° / ${Math.round(w.main.temp_max)}°`;
+
+      $('qsHum').textContent = w.main.humidity + '%';
+
+      $('qsWind').textContent = `${w.wind.speed} м/с ${compass(w.wind.deg)}`;
+
+      $('qsVis').textContent = w.visibility >= 1000
+        ? (w.visibility / 1000).toFixed(0) + ' км'
+        : w.visibility + ' м';
+
+      // ── Детальные карточки ────────────────────────────────────────────
+      $('dFeel').textContent  = Math.round(w.main.feels_like);
+      $('dHum').textContent   = w.main.humidity;
+      $('dWind').textContent  = w.wind.speed;
+
+      // Порывы ветра — показываем только если есть данные
+      $('dWindGust').textContent = w.wind.gust
+        ? `м/с · порывы до ${w.wind.gust} м/с`
+        : 'м/с';
+
+      $('dDir').textContent    = compass(w.wind.deg);
+      $('dDirDeg').textContent = w.wind.deg + '°';
+      $('dPres').textContent   = w.main.pressure;
+      $('dCloud').textContent  = w.clouds.all;
+      $('dRise').textContent   = toHHMM(w.sys.sunrise, tz);
+      $('dSet').textContent    = toHHMM(w.sys.sunset, tz);
+
+      // ── Осадки (rain/snow появляются только при наличии) ─────────────
+      const hasRain = w.rain && w.rain['1h'] !== undefined;
+      const hasSnow = w.snow && w.snow['1h'] !== undefined;
+
+      if (hasRain || hasSnow) {
+        if (hasRain) {
+          $('pRain').textContent  = `${w.rain['1h']} мм`;
+          $('rainCard').style.display = 'flex';
+        } else {
+          $('rainCard').style.display = 'none';
+        }
+
+        if (hasSnow) {
+          $('pSnow').textContent  = `${w.snow['1h']} мм`;
+          $('snowCard').style.display = 'flex';
+        } else {
+          $('snowCard').style.display = 'none';
+        }
+
+        $('precipRow').classList.add('show');
+      } else {
+        $('precipRow').classList.remove('show');
+      }
+
+      // Показываем карточки
+      $('mc').classList.add('show');
+      $('grid').classList.add('show');
+    }
+
+    // ── Обработчики событий ───────────────────────────────────────────────
+    $('searchBtn').addEventListener('click', search);
+    $('forecastBtn').addEventListener('click', searchForecast);
+    $('q').addEventListener('keydown', e => {
+      if (e.key === 'Enter') search();
+    });
+
+    $('debugBtn').addEventListener('click', openDebug);
+    $('modalClose').addEventListener('click', closeDebug);
+    $('tabReqBtn').addEventListener('click', () => showTab('req'));
+    $('tabRespBtn').addEventListener('click', () => showTab('resp'));
+
+    // Закрытие по клику на оверлей (вне модала)
+    $('debugModal').addEventListener('click', e => {
+      if (e.target === $('debugModal')) closeDebug();
+    });
+
+    // Закрытие по Escape
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeDebug();
+    });
+
+    // Фокус на поле при загрузке страницы
+    $('q').focus();
+  </script>
+</body>
+</html>

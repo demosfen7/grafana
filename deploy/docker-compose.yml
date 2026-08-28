@@ -1,7 +1,7 @@
-# grafana — учебный проект (weather CLI), пользователь vibecoding (rootless Docker)
-# Консольное приложение с input() — не веб-сервис, поэтому без порта/healthcheck/Caddy.
-# stdin_open+tty не дают контейнеру уйти в краш-луп на EOFError без интерактивного attach.
+# grafana — учебный проект (weather CLI + статический веб-интерфейс), пользователь vibecoding (rootless Docker)
 services:
+  # Консольное приложение с input() — не веб-сервис, без порта/healthcheck/Caddy.
+  # stdin_open+tty не дают контейнеру уйти в краш-луп на EOFError без интерактивного attach.
   vibecoding-grafana:
     image: ${IMAGE}
     container_name: vibecoding-grafana
@@ -15,6 +15,18 @@ services:
       LOKI_URL: "http://loki:3100"
     networks:
       - loki-net
+
+  # Статическая страница из web/index.html: ходит в OpenWeather прямо из браузера,
+  # ключ вводится один раз и хранится в localStorage — на сервере в исходниках его нет.
+  web:
+    image: nginx:alpine
+    container_name: vibecoding-grafana-web
+    restart: unless-stopped
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    # мост к Caddy: IP шлюза его сети + разрешение в ufw
+    ports:
+      - "172.28.0.1:8092:80"
 
 networks:
   loki-net:

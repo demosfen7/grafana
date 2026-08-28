@@ -65,7 +65,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          script: mkdir -p ${{ env.DEPLOY_DIR }}
+          script: mkdir -p ${{ env.DEPLOY_DIR }}/web
 
       - name: Copy compose file
         uses: appleboy/scp-action@v0.1.7
@@ -77,6 +77,16 @@ jobs:
           source: deploy/docker-compose.yml
           target: ${{ env.DEPLOY_DIR }}
           strip_components: 1
+
+      - name: Copy web assets
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: web/index.html
+          target: ${{ env.DEPLOY_DIR }}
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3

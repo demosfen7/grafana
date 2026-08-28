@@ -10,8 +10,10 @@ vibecoding.aithinglab.com {
 		reverse_proxy 172.28.0.1:8091
 	}
 
-	# grafana: консольное CLI-приложение без HTTP, роут не нужен
-	# (порт 8092 освобождён)
+	# grafana: статическая веб-страница (nginx), ключ вводится в браузере
+	handle_path /grafana/* {
+		reverse_proxy 172.28.0.1:8092
+	}
 
 	# lokigrafana (Grafana с GF_SERVER_SERVE_FROM_SUB_PATH=true — префикс НЕ срезаем)
 	handle /lokigrafana/* {
