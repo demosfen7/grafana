@@ -48,8 +48,18 @@ def setup_logging(app_name: str = "weather-cli") -> logging.Logger:
     loki_url = os.getenv("LOKI_URL")
     if loki_url:
         formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        # job — стандартный лейбл, вокруг которого построено большинство готовых Loki-дашбордов
-        handler = LokiHandler(loki_url, labels={"app": app_name, "job": app_name})
+        # job/app — конвенция большинства готовых дашбордов; container_name/service_name/instance —
+        # конвенция дашбордов, рассчитанных на Promtail + Docker service discovery (например 24574)
+        handler = LokiHandler(
+            loki_url,
+            labels={
+                "app": app_name,
+                "job": app_name,
+                "container_name": app_name,
+                "service_name": app_name,
+                "instance": app_name,
+            },
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
