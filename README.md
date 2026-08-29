@@ -11,7 +11,7 @@
 | Этот репозиторий | https://github.com/demosfen7/grafana |
 | Стек Grafana + Loki (логи этого приложения) | https://vibecoding.aithinglab.com/lokigrafana/ |
 | Репозиторий стека логирования | https://github.com/demosfen7/lokigrafana |
-| Соседний учебный проект на том же поддомене | https://vibecoding.aithinglab.com/gitflow/ · [репозиторий](https://github.com/demosfen7/Gitflow) |
+
 | Получить свой ключ OpenWeather | https://openweathermap.org/ → My Profile → API keys |
 
 ---
@@ -26,7 +26,7 @@
 - В контейнере держится живым через `stdin_open`/`tty` (иначе `input()` без терминала уходил бы в краш-луп).
 - Подключиться к меню на сервере:
   ```
-  ssh hetzner-vibecoding
+  ssh <алиас сервера в твоём ~/.ssh/config>
   docker attach vibecoding-grafana
   # выйти без остановки контейнера: Ctrl+P, затем Ctrl+Q
   ```
@@ -60,7 +60,7 @@
 
 | Что | Значение |
 |---|---|
-| SSH | `ssh hetzner-vibecoding` (алиас, ключ `~/.ssh/vibecoding_hetzner`, пользователь без sudo, свой rootless Docker) |
+| SSH | по алиасу из `~/.ssh/config` (см. свои секреты) — пользователь без sudo, свой rootless Docker |
 | Папка деплоя | `/opt/vibecoding.aithinglab.com/grafana/` |
 | `.env` на сервере | `/opt/vibecoding.aithinglab.com/grafana/.env` — туда руками дописывается `API_KEY=...` (не коммитится, CI его не трогает, только обновляет строку `IMAGE=`) |
 | Docker-сеть | `loki-net` (внешняя, общая с проектом `lokigrafana` — так `vibecoding-grafana` достаёт до `loki` по имени сервиса) |
@@ -81,10 +81,10 @@
 
 | Секрет | Значение |
 |---|---|
-| `SSH_HOST` | `46.225.73.78` |
-| `SSH_USER` | `vibecoding` |
-| `SSH_PORT` | `22` |
-| `SSH_KEY` | содержимое `~/.ssh/vibecoding_hetzner` |
+| `SSH_HOST` | `<хост сервера>` |
+| `SSH_USER` | `<пользователь rootless Docker>` |
+| `SSH_PORT` | `<SSH-порт>` |
+| `SSH_KEY` | `<содержимое приватного ключа этого пользователя>` |
 
 ---
 
